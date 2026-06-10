@@ -1,0 +1,109 @@
+name: Build Admin Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-admin-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Create Android project from flat source
+        run: |
+          mkdir -p app/src/main/java/com/multiplus/admin app/src/main/assets app/src/main/res/values app/src/main/res/drawable app/src/main/res/mipmap-hdpi app/src/main/res/mipmap-mdpi app/src/main/res/mipmap-xhdpi app/src/main/res/mipmap-xxhdpi app/src/main/res/mipmap-xxxhdpi
+          cp index.html app/src/main/assets/index.html
+          cp firebase-config.js app/src/main/assets/firebase-config.js
+          cp logo.png app/src/main/assets/logo.png
+          if [ -f logo.svg ]; then cp logo.svg app/src/main/assets/logo.svg; fi
+          if [ -f logo.ico ]; then cp logo.ico app/src/main/assets/logo.ico; fi
+          cp logo.png app/src/main/res/drawable/logo.png
+          cp logo.png app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          cp logo.png app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+          cp logo.png app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          cp logo.png app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
+          cp logo.png app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          cp logo.png app/src/main/res/mipmap-xhdpi/ic_launcher_round.png
+          cp logo.png app/src/main/res/mipmap-hdpi/ic_launcher.png
+          cp logo.png app/src/main/res/mipmap-hdpi/ic_launcher_round.png
+          cp logo.png app/src/main/res/mipmap-mdpi/ic_launcher.png
+          cp logo.png app/src/main/res/mipmap-mdpi/ic_launcher_round.png
+          cp AndroidManifest.xml app/src/main/AndroidManifest.xml
+          cp MainActivity.java app/src/main/java/com/multiplus/admin/MainActivity.java
+          cat > settings.gradle <<'GRADLE'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name='MultiPlusTVAdmin'
+          include ':app'
+          GRADLE
+          cat > build.gradle <<'GRADLE'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          GRADLE
+          cat > app/build.gradle <<'GRADLE'
+          plugins { id 'com.android.application' }
+
+          android {
+              namespace 'com.multiplus.admin'
+              compileSdk 35
+              defaultConfig {
+                  applicationId 'com.multiplus.admin'
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          GRADLE
+          cat > app/src/main/res/values/styles.xml <<'XML'
+          <resources>
+              <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+                  <item name="android:windowNoTitle">true</item>
+                  <item name="android:windowActionBar">false</item>
+                  <item name="android:windowFullscreen">true</item>
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:colorAccent">#22c7ff</item>
+                  <item name="android:windowBackground">#030712</item>
+              </style>
+          </resources>
+          XML
+
+      - name: Build installable debug APK
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify APK is installable
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk
+          "$AAPT" dump badging app/build/outputs/apk/debug/app-debug.apk | head -20
+
+      - name: Rename APK
+        run: |
+          mkdir -p release
+          cp app/build/outputs/apk/debug/app-debug.apk release/Multi-Plus-TV-Admin-v1-INSTALLABLE.apk
+          ls -lh release/Multi-Plus-TV-Admin-v1-INSTALLABLE.apk
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Multi-Plus-TV-Admin-v1-APK
+          path: release/Multi-Plus-TV-Admin-v1-INSTALLABLE.apk
